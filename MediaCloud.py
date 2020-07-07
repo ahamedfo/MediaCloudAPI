@@ -166,13 +166,13 @@ def text_open():
 def punct_space(token):
     return token.is_punct or token.is_space
 
-def line_review(article_dir, article_to_parse=3):
-    for article_num in range(article_to_parse):
-        cur_article = article_dir + "/text" + str(article_num)
-        with open(cur_article, encoding="utf-8") as f:
-            next(f)
-            for line in f:
-                yield line.replace('\\n', '\n')
+def line_review(list_text):
+        for review in list_text:
+            review.replace('-PRON-', '')
+            yield review.replace('\\n', '\n')
+            print('new_review :::::::: ' + review + '\n' + '\n' + '\n' + '\n' + '\n')
+
+        print('DONE :::::::: '  + '\n' + '\n' + '\n' + '\n' + '\n')
 
 
 def lemmatized_sentence_corpus(list_text):
@@ -183,45 +183,25 @@ def lemmatized_sentence_corpus(list_text):
 
 unigram_sentences_filepath = intermediate_directory + 'unigram_sentences_all.txt'
 
+def runners_Sen(unigram_sentences_filepaths):
 
-def sentence_generator(self, article_dir, articles_to_parse=10000):
-    """
-    Generator function that yields each sentence in all text files.
-    """
-    for article_num in range(articles_to_parse):
-        cur_article = article_dir + "/text" + str(article_num)
-        with open(cur_article, encoding="utf-8") as f:
-            next(f)  # skip first line.
-            data = f.read()
-            corpus = self.nlp(data)
-            for sent in corpus.sents:
-                # filter out punctuation and whitespace from sentences.
-                cur_sentence = " ".join([token.lemma_ for token in sent
-                                         if not self.punct_space(token)])
-                # TODO - Deal with the -PRON-
-                yield cur_sentence
-
-def write_all_article_sentences(self):
-    """
-    writes all sentences into one file.
-    So it can be used by spaCy's LineSentence function.
-    Then returns a LineSentence iterator of sentence unigrams.
-    """
-
-    with open(self.unigram_sentences_filepath, 'w', encoding="utf-8") as f:
-        for sentence in self.sentence_generator("data/"):
+    with open(unigram_sentences_filepaths, 'w', encoding='utf_8') as f:
+        for sentence in lemmatized_sentence_corpus(text_open()):
+            print(sentence)
             f.write(sentence + '\n')
 
+    unigram_sentences = LineSentence(unigram_sentences_filepaths)
 
     # for unigram_sentence in unigram_sentences:
         # print(u' '.join(unigram_sentence))
         # print(u' ')
 
+    return unigram_sentences
 
 bigram_model_filepath = intermediate_directory + 'bigram_model_all'
 
 def phrases():
-    unigram_sentences = LineSentence(unigram_sentences_filepath)
+    unigram_sentences = runners_Sen(unigram_sentences_filepath)
     bigram_model = Phrases(unigram_sentences)
     bigram_model.save(bigram_model_filepath)
     bigram_model = Phrases.load(bigram_model_filepath)
@@ -257,7 +237,7 @@ def phrases():
 
     trigram_reviews_filepath = intermediate_directory + 'trigram_transformed_reviews_all.txt'
     with open(trigram_reviews_filepath, 'w', encoding='utf_8') as f:
-        for parsed_review in nlp.pipe(line_review('data/'),
+        for parsed_review in nlp.pipe(line_review(text_open()),
                                       batch_size=10000, n_threads=4):
             # lemmatize the text, removing punctuation and whitespace
             unigram_review = [token.lemma_ for token in parsed_review
@@ -293,7 +273,7 @@ def phrases():
     #########trigram_dictionary.filter_extremes(no_below=10, no_above=0.4)##########
     #print(trigram_dictionary)
 
-    trigram_dictionary.filter_extremes(no_below=0, no_above=100000)
+    trigram_dictionary.filter_extremes(no_below=10, no_above=0.4)
     trigram_dictionary.compactify()
     # print(trigram_dictionary)
 
