@@ -7,17 +7,13 @@ import csv
 import spacy
 
 import pandas as pd
-import itertools as it
 import time
 from gensim.models import Phrases
 from gensim.models.word2vec import LineSentence
 from gensim.corpora import Dictionary, MmCorpus
 from gensim.models.ldamulticore import LdaMulticore
 from gensim.parsing.preprocessing import STOPWORDS
-import gensim
 import pickle
-import IPython
-import jsonpickle
 
 import pyLDAvis
 import pyLDAvis.gensim
@@ -166,13 +162,13 @@ def text_open():
 def punct_space(token):
     return token.is_punct or token.is_space
 
-def line_review(list_text):
-        for review in list_text:
-            review.replace('-PRON-', '')
-            yield review.replace('\\n', '\n')
-            print('new_review :::::::: ' + review + '\n' + '\n' + '\n' + '\n' + '\n')
-
-        print('DONE :::::::: '  + '\n' + '\n' + '\n' + '\n' + '\n')
+def line_review(article_dir, article_to_parse=3):
+    for article_num in range(article_to_parse):
+        cur_article = article_dir + "/text" + str(article_num)
+        with open(cur_article, encoding="utf-8") as f:
+            next(f)
+            for line in f:
+                yield line.replace('\\n', '\n')
 
 
 def lemmatized_sentence_corpus(list_text):
@@ -183,25 +179,45 @@ def lemmatized_sentence_corpus(list_text):
 
 unigram_sentences_filepath = intermediate_directory + 'unigram_sentences_all.txt'
 
-def runners_Sen(unigram_sentences_filepaths):
 
-    with open(unigram_sentences_filepaths, 'w', encoding='utf_8') as f:
-        for sentence in lemmatized_sentence_corpus(text_open()):
-            print(sentence)
+def sentence_generator(self, article_dir, articles_to_parse=10000):
+    """
+    Generator function that yields each sentence in all text files.
+    """
+    for article_num in range(articles_to_parse):
+        cur_article = article_dir + "/text" + str(article_num)
+        with open(cur_article, encoding="utf-8") as f:
+            next(f)  # skip first line.
+            data = f.read()
+            corpus = self.nlp(data)
+            for sent in corpus.sents:
+                # filter out punctuation and whitespace from sentences.
+                cur_sentence = " ".join([token.lemma_ for token in sent
+                                         if not self.punct_space(token)])
+                # TODO - Deal with the -PRON-
+                yield cur_sentence
+
+def write_all_article_sentences(self):
+    """
+    writes all sentences into one file.
+    So it can be used by spaCy's LineSentence function.
+    Then returns a LineSentence iterator of sentence unigrams.
+    """
+
+    with open(self.unigram_sentences_filepath, 'w', encoding="utf-8") as f:
+        for sentence in self.sentence_generator("data/"):
             f.write(sentence + '\n')
 
-    unigram_sentences = LineSentence(unigram_sentences_filepaths)
 
     # for unigram_sentence in unigram_sentences:
         # print(u' '.join(unigram_sentence))
         # print(u' ')
 
-    return unigram_sentences
 
 bigram_model_filepath = intermediate_directory + 'bigram_model_all'
 
 def phrases():
-    unigram_sentences = runners_Sen(unigram_sentences_filepath)
+    unigram_sentences = LineSentence(unigram_sentences_filepath)
     bigram_model = Phrases(unigram_sentences)
     bigram_model.save(bigram_model_filepath)
     bigram_model = Phrases.load(bigram_model_filepath)
@@ -237,7 +253,7 @@ def phrases():
 
     trigram_reviews_filepath = intermediate_directory + 'trigram_transformed_reviews_all.txt'
     with open(trigram_reviews_filepath, 'w', encoding='utf_8') as f:
-        for parsed_review in nlp.pipe(line_review(text_open()),
+        for parsed_review in nlp.pipe(line_review('data/'),
                                       batch_size=10000, n_threads=4):
             # lemmatize the text, removing punctuation and whitespace
             unigram_review = [token.lemma_ for token in parsed_review
@@ -273,7 +289,7 @@ def phrases():
     #########trigram_dictionary.filter_extremes(no_below=10, no_above=0.4)##########
     #print(trigram_dictionary)
 
-    trigram_dictionary.filter_extremes(no_below=10, no_above=0.4)
+    trigram_dictionary.filter_extremes(no_below=0, no_above=100000)
     trigram_dictionary.compactify()
     # print(trigram_dictionary)
 
@@ -355,19 +371,14 @@ def explore_topic(topic_number, topn=25):
 LDAvis_data_filepath = intermediate_directory + 'ldavis_prepared'
 
 def LDA_Diagram():
-
     trigram_bow_corpus = MmCorpus(trigram_bow_filepath)
-
     lda = trigramz()
-
     LDAvis_prepared = pyLDAvis.gensim.prepare(lda, trigram_bow_corpus,
                                               phrases())
-
     #print(LDAvis_prepared)
     with open(LDAvis_data_filepath, 'wb') as f:
         pickle.dump(LDAvis_prepared, f)
         f.close()
-
 
     # load the pre-prepared pyLDAvis data from disk
     with open(LDAvis_data_filepath, 'rb') as f:
@@ -420,29 +431,8 @@ def text_reader_Years(DOC):
                 return list_rows
         return list_rows
 
-def article_read_urls(list):
-    i = 0
-    while i < 10:
-        print(list[i][1])
-        print(list[i][0])
-        url = list[i][1]
-        article = Article(url, language='en')
-        article.download()
-        try:
-            article.parse()
-        except (ArticleException, AttributeError, UnicodeError) as e:
-            i += 1
-            continue
-        if i % 100 == 0:
-            print(article.text)
-        year = list[i][0]
 
-        print(year)
-        f = open('data/' + str(year[:4]) + '/text' + str(i), 'w')
-        f.write(article.text)
-        f.close()
-        i += 1
-        time.sleep(5)
+
 
 def list_taker(text_list):
     for url, date in text_list:
@@ -468,15 +458,133 @@ def list_taker(text_list):
         #         i += 1
         #     return string_list
 
-if __name__ == '__main__':
-    # v = text_reader_Years('black-lives-matter-all-story-urls-20200621214756.csv')
-    # print(v)
-    # article_read_urls(v)
+docs = '/Users/ahamedfofana/PycharmProjects/MediaCloudAPI/black-lives-matter-all-story-urls-20200621214756.csv'
 
-    # print(len(list(line_review(text_open()))))
-    a = trigramz().get_document_topics(B_O_wCreator(trigram_reviews_filepath, phrases()))
-    for v in a:
-        print(v)
-    print(B_O_wCreator(trigram_reviews_filepath, phrases()))
+
+from gensim.models import ldaseqmodel
+from gensim.corpora import Dictionary, bleicorpus
+import numpy
+from gensim.matutils import hellinger
+
+def text_reader_ye(DOC):
+    with open(DOC) as csv_file:
+        list_rows = []
+        csv_reader = list(csv.reader(csv_file, delimiter=','))
+        line_count = 0
+        random.shuffle(csv_reader)
+        for row in csv_reader:
+            if str(row[1]) == '':
+                continue
+            if line_count == 0:
+                line_count += 1
+            else:
+                list_rows += {(row[1], row[3])}
+                line_count += 1
+            # print(f'Processed {line_count} lines.')
+
+            ## ONLY USING THE FIRST 10
+            if line_count == 11:
+                list_rows.sort(key=lambda r: (int(r[0][:4]), int(r[0][5:7]), int(r[0][8:11])))
+                #print(list_rows)
+                return list_rows
+        list_rows.sort(key=lambda r: (int(r[0][:4]), int(r[0][5:7]), int(r[0][8:11])))
+        #print(list_rows)
+        return list_rows
+
+from collections import OrderedDict
+
+
+def headline_counter(headlines):
+    dicts = {}
+    with open(headlines) as csv_file:
+        next(csv_file)
+        csv_reader = list(csv.reader(csv_file, delimiter=','))
+        for row in csv_reader:
+            date = str(row[1])
+            if date == '':
+                continue
+            #print(date)
+            if (date[:7]) not in dicts:
+                dicts[row[1][:7]] = 1
+            else:
+                dicts[row[1][:7]] += 1
+
+
+    return dicts
+
+dictionary_dates = headline_counter(docs)
+
+
+def article_read_urls(list,directory,article_num=10):
+    i = 0
+    j = 0
+    dicts = {}
+    while i < article_num:
+        url = list[i][1]
+        year = list[i][0]
+        article = Article(url, language='en')
+        article.download()
+        try:
+            article.parse()
+        except (ArticleException, AttributeError, UnicodeError) as e:
+            print(i)
+            print(j)
+            print(year)
+            i += 1
+            dictionary_dates[year[:7]] -= 1
+            continue
+        if i % 100 == 0:
+            print(article.text)
+
+
+        print(year)
+
+        f = open(directory + 'text' + str(j), 'w')
+        f.write(article.text)
+        f.close()
+        i += 1
+        j += 1
+        time.sleep(5)
+
+def time_slice(date_1, date_2):
+    time_slice = []
+    Total_time_difference = 0
+    start_date = date_1
+    cur_date = start_date
+    end_date = date_2
+    while cur_date != end_date:
+        if cur_date in dictionary_dates:
+            time_slice.append(dictionary_dates[cur_date])
+        # if month is less than 12, increment month
+
+        if int(cur_date[5:7]) + 1 <= 12:
+            if int(cur_date[5:7]) + 1 < 10:
+                cur_date = cur_date[:4] + '-0' + str(int(cur_date[5:7]) + 1)
+            else:
+                cur_date = cur_date[:4] + '-' + str(int(cur_date[5:7]) + 1)
+
+        #otherwise increment the entire year and find the next val in the dictionary from the start of the year
+        else:
+            print(1)
+            cur_date = str(int(cur_date[:4]) + 1) + '-01'
+    time_slice.append(dictionary_dates[end_date])
+    return time_slice
+
+if __name__ == '__main__':
+
+    k = headline_counter(docs)
+    print(k)
+
+    a = time_slice('2016-12', '2018-05')
+    print(a)
+    print(len(a))
+
+
+
+    #list_dates = text_reader_ye(docs)
+    #article_read_urls(list_dates, 'data/')
+
+    #print(dictionary_dates)
+    #print(pd.DataFrame(8,['label', 'Black Girl', 'military'], [ 'Top Five Words']))
 
     #article_reader(text_reader())
